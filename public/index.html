@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>百万美金</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>💰 百万美金 <small>Millions of Dollars</small></h1>
+    <div id="status"></div>
+  </header>
+
+  <main>
+    <section id="join" class="card hidden">
+      <h2>加入房间</h2>
+      <p id="join-hint" class="muted"></p>
+      <form id="join-form">
+        <input id="join-name" maxlength="16" placeholder="你的昵称" autocomplete="off">
+        <button type="submit">加入</button>
+      </form>
+      <p id="join-error" class="error"></p>
+    </section>
+
+    <div id="app"></div>
+
+    <div class="grid2">
+      <section class="card">
+        <h3>📜 游戏记录</h3>
+        <div id="log" class="scroll"></div>
+      </section>
+      <section class="card">
+        <h3>💬 聊天 / 谈判</h3>
+        <div id="chat" class="scroll"></div>
+        <form id="chat-form">
+          <input id="chat-input" maxlength="300" placeholder="说点什么……真话假话都行" autocomplete="off">
+          <button type="submit">发送</button>
+        </form>
+      </section>
+    </div>
+
+    <details class="card rules">
+      <summary>📖 规则速查</summary>
+      <div id="rules"></div>
+    </details>
+  </main>
+
+  <div id="toast" class="hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
