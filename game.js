@@ -3,11 +3,11 @@
 // 《百万美金》游戏核心逻辑（单房间）。金额单位：万。
 
 const ROLES = {
-  snitch: { name: '告密者', desc: '仅1人时生效：取回保证金，点名淘汰一种身份，然后正常分赃（若只剩自己则罚300万、不分赃）' },
-  brute: { name: '暴徒', desc: '仅1人且未被点名时生效：取回保证金，获得1张威胁卡' },
-  driver: { name: '司机', desc: '仅1人幸存时生效：其他每个分赃角色付给你100万车费' },
-  crook: { name: '恶棍', desc: '仅1人幸存时生效：从参与分赃的暴徒手里拿走200万' },
-  mastermind: { name: '谋士', desc: '仅1人幸存时生效：总赃款增加200万后再平分' },
+  snitch: { name: '告密者', desc: '点名淘汰一种公开身份，再正常分赃' },
+  brute: { name: '暴徒', desc: '获得1张威胁卡，可偷看别人身份' },
+  driver: { name: '司机', desc: '其他分赃角色每人付你100万车费' },
+  crook: { name: '恶棍', desc: '从分赃的暴徒手里拿走200万' },
+  mastermind: { name: '谋士', desc: '总赃款增加200万再平分' },
 };
 // 抢劫阶段的判定顺序
 const ROLE_ORDER = ['snitch', 'brute', 'driver', 'crook', 'mastermind'];
