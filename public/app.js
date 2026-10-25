@@ -134,6 +134,7 @@ function renderLobby() {
       <label><input type="checkbox" ${s.settings.bruteShares ? 'checked' : ''} ${dis}
         onchange="act('settings',{settings:{bruteShares:this.checked}})"> 唯一的暴徒也参与分赃（与规则中的分赃示例一致；关闭则暴徒拿威胁卡后退出分赃）</label>
       <p class="muted">人数与角色：3人（特殊玩法，每人两个角色，5种全用）· 4人：司机/暴徒/恶棍 · 5–6人：加告密者 · 7–8人：再加谋士</p>
+      ${renderRoleIntro()}
       ${s.isHost
         ? `<button ${s.players.length < 3 ? 'disabled' : ''} onclick="act('start')">开始游戏</button>`
         : '<p class="muted">等待房主开始游戏……</p>'}
@@ -201,7 +202,7 @@ let roleIntroOpen = false;
 function renderRoleIntro() {
   const items = state.activeRoles.map((r) => `<li>${tag(r)} ${esc(state.roles[r].desc)}</li>`).join('');
   return `<details class="role-intro" ${roleIntroOpen ? 'open' : ''} ontoggle="roleIntroOpen=this.open">
-    <summary>🎭 本局角色介绍</summary>
+    <summary>🎭 ${state.phase === 'lobby' ? `角色介绍（按当前${Math.max(state.players.length, 3)}人）` : '本局角色介绍'}</summary>
     <ul>${items}</ul>
     <p class="muted small">能力只在该身份恰好1人幸存时生效；同一身份2人以上则全部出局。</p>
   </details>`;
