@@ -200,9 +200,11 @@ function renderCenter() {
 let roleIntroOpen = false;
 
 function renderRoleIntro() {
-  const items = state.activeRoles.map((r) => `<li>${tag(r)} ${esc(state.roles[r].desc)}</li>`).join('');
+  // 大厅里介绍全部角色，开局后只介绍本局用到的
+  const roles = state.phase === 'lobby' ? state.roleOrder : state.activeRoles;
+  const items = roles.map((r) => `<li>${tag(r)} ${esc(state.roles[r].desc)}</li>`).join('');
   return `<details class="role-intro" ${roleIntroOpen ? 'open' : ''} ontoggle="roleIntroOpen=this.open">
-    <summary>🎭 ${state.phase === 'lobby' ? `角色介绍（按当前${Math.max(state.players.length, 3)}人）` : '本局角色介绍'}</summary>
+    <summary>🎭 ${state.phase === 'lobby' ? '角色介绍' : '本局角色介绍'}</summary>
     <ul>${items}</ul>
     <p class="muted small">能力只在该身份恰好1人幸存时生效；同一身份2人以上则全部出局。</p>
   </details>`;

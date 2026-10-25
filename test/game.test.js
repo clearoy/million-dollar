@@ -41,6 +41,7 @@ test('告密者点名：被点名者淘汰、没收保证金，暴徒例外', ()
   const { g, ids } = setup(5);
   rig(g, { amount: 1000, ante: 200, bonus: null });
   ['snitch', 'driver', 'driver', 'brute', 'crook'].forEach((r, i) => g.choose(ids[i], [r]));
+  g.center.revealed = ['snitch', 'brute', 'driver', 'driver']; // 固定藏起恶棍，保证暴徒可被点名
   g.startHeist(ids[0]);
   assert.strictEqual(g.phase, 'snitch');
   assert.ok(g.nameRole(ids[1], 'brute').error);
