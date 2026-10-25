@@ -3,11 +3,11 @@
 // 《百万美金》游戏核心逻辑（单房间）。金额单位：万。
 
 const ROLES = {
-  snitch: { name: '告密者', desc: '仅1人时生效：退出分赃取回保证金，点名淘汰一种身份' },
-  brute: { name: '暴徒', desc: '仅1人且未被点名时生效：取回保证金，获得1张威胁卡' },
-  driver: { name: '司机', desc: '仅1人幸存时生效：其他每个分赃角色付给你100万车费' },
-  crook: { name: '恶棍', desc: '仅1人幸存时生效：从参与分赃的暴徒手里拿走200万' },
-  mastermind: { name: '谋士', desc: '仅1人幸存时生效：总赃款增加200万后再平分' },
+  snitch: { name: '告密者', desc: '点名淘汰一种公开身份，再正常分赃' },
+  brute: { name: '暴徒', desc: '获得1张威胁卡，可偷看别人身份' },
+  driver: { name: '司机', desc: '其他分赃角色每人付你100万车费' },
+  crook: { name: '恶棍', desc: '从分赃的暴徒手里拿走200万' },
+  mastermind: { name: '谋士', desc: '总赃款增加200万再平分' },
 };
 // 抢劫阶段的判定顺序
 const ROLE_ORDER = ['snitch', 'brute', 'driver', 'crook', 'mastermind'];
@@ -418,7 +418,7 @@ class Game {
     let loneSnitch = null;
     if (snitches.length === 1) {
       loneSnitch = snitches[0];
-      set(loneSnitch, 'snitch', true, false, named ? `告密，点名了${roleName(named)}` : '告密者（无可点名身份）');
+      set(loneSnitch, 'snitch', true, true, named ? `告密，点名了${roleName(named)}` : '告密者（无可点名身份）');
       if (named) details.push(`告密者 ${this.player(loneSnitch.playerId).name} 点名了【${roleName(named)}】。`);
     } else if (snitches.length >= 2) {
       snitches.forEach((s) => set(s, 'dup', false, false, '多名告密者，全部出局'));
@@ -459,13 +459,14 @@ class Game {
       if (o.refund) this.player(s.playerId).cash += s.antePaid;
     }
 
-    // 5. 特殊处罚：只剩告密者
+    // 5. 特殊处罚：只剩告密者时不分赃并罚300万，否则告密者正常分赃
     const survivors = active.filter((s) => out.get(s.id).outcome === 'ok');
     if (loneSnitch && survivors.length === 0) {
       const p = this.player(loneSnitch.playerId);
       const loss = Math.min(300, p.cash);
       p.cash -= loss;
-      out.get(loneSnitch.id).text = '只剩告密者自己：损失300万';
+      out.get(loneSnitch.id).shares = false;
+      out.get(loneSnitch.id).text = '只剩告密者自己：损失300万，不分赃';
       details.push(`只剩下告密者 ${p.name}，罚款${loss}万。`);
     }
 
