@@ -9,9 +9,9 @@
   --red: #ef6b6b;
   --snitch: #b48ef2;
   --brute: #ef6b6b;
-  --driver: #4fb3e8;
-  --crook: #e6b450;
-  --mastermind: #5ccf7f;
+  --driver: #5ccf7f;
+  --crook: #4fb3e8;
+  --mastermind: #e6b450;
 }
 
 * { box-sizing: border-box; }
