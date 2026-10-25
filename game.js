@@ -617,7 +617,8 @@ class Game {
       settings: this.settings,
       roles: ROLES,
       roleOrder: ROLE_ORDER,
-      activeRoles: this.activeRoles,
+      // 大厅里按当前人数预览将使用的角色
+      activeRoles: this.phase === 'lobby' ? rolesForCount(this.players.length) : this.activeRoles,
       allowedRoles: me ? this.allowedRoles(pid) : [],
       slotsPerPlayer: this.phase === 'lobby' ? 1 : this.slotsPerPlayer(),
       loot: this.loot,
