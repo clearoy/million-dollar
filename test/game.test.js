@@ -46,11 +46,11 @@ test('告密者点名：被点名者淘汰、没收保证金，暴徒例外', ()
   assert.ok(g.nameRole(ids[1], 'brute').error);
   g.nameRole(ids[0], 'brute');
   assert.strictEqual(g.phase, 'results');
-  assert.strictEqual(g.player(ids[0]).cash, 500); // 告密者取回
+  assert.strictEqual(g.player(ids[0]).cash, 500 + 500); // 告密者取回保证金，与恶棍平分
   assert.strictEqual(g.player(ids[1]).cash, 300); // 司机撞车没收
   assert.strictEqual(g.player(ids[3]).cash, 500); // 被点名的暴徒取回
   assert.strictEqual(g.player(ids[3]).threats.length, 0);
-  assert.strictEqual(g.player(ids[4]).cash, 500 + 1000); // 恶棍独得
+  assert.strictEqual(g.player(ids[4]).cash, 500 + 500); // 恶棍与告密者平分
 });
 
 test('多名告密者全部出局；只剩告密者罚300万', () => {
@@ -120,4 +120,22 @@ test('视图不泄露他人身份', () => {
   assert.strictEqual(v.players[0].slots[0].role, 'brute');
   assert.strictEqual(v.players[1].slots[0].role, null);
   assert.strictEqual(g.viewFor(null).players[0].slots[0].role, null);
+});
+
+test('三人局截图复现：唯一的告密者与恶棍平分赃款', () => {
+  const g = new Game();
+  const ids = ['tyy', 'roy', 'zym'].map((n, i) => g.join(`tok-${n}-zzzz`, n).playerId);
+  g.start(ids[0]);
+  rig(g, { amount: 1000, ante: 100, bonus: 'mastermind' });
+  g.choose(ids[0], ['brute', 'driver']);
+  g.choose(ids[1], ['snitch', 'driver']);
+  g.choose(ids[2], ['brute', 'crook']);
+  g.startHeist(ids[0]);
+  if (g.phase === 'snitch') g.nameRole(ids[1], 'brute');
+  else g.resolve('brute'); // 恶棍被藏时也能确定性地复现
+  const share = Object.fromEntries(g.results.slots.filter((s) => s.share != null).map((s) => [s.role, s.share]));
+  assert.deepStrictEqual(share, { snitch: 500, crook: 500 });
+  assert.strictEqual(g.player(ids[0]).cash, 400); // 500 - 200 + 暴徒退100
+  assert.strictEqual(g.player(ids[1]).cash, 900); // 500 - 200 + 告密者退100 + 500
+  assert.strictEqual(g.player(ids[2]).cash, 1000); // 500 - 200 + 200 + 500
 });
