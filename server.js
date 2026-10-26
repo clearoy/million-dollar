@@ -4,7 +4,7 @@ const path = require('path');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
-const { Game } = require('./game');
+const { Game, OFFLINE_GRACE_MS } = require('./game');
 
 const app = express();
 const server = http.createServer(app);
@@ -39,6 +39,7 @@ const actions = {
   withdraw: (pid, a) => game.withdraw(pid, a.slotId),
   threat: (pid, a) => game.useThreat(pid, a.target),
   heist: (pid) => game.startHeist(pid),
+  forceSnitch: (pid) => game.forceSnitch(pid),
   readyHeist: (pid, a) => game.readyHeist(pid, !!a.on),
   name: (pid, a) => game.nameRole(pid, a.role),
   next: (pid) => game.nextRound(pid),
@@ -95,6 +96,14 @@ io.on('connection', (socket) => {
           broadcast();
         }
       }, 15000));
+    }
+    if (game.phase === 'negotiation') {
+      // 宽限期过后重新检查是否所有人都已确认开车
+      setTimeout(() => {
+        const phase = game.phase;
+        game.checkHeistReady();
+        if (game.phase !== phase) broadcast();
+      }, OFFLINE_GRACE_MS + 500);
     }
     broadcast();
   });

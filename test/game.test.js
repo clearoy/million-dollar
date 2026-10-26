@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { Game } = require('../game');
+const { Game, OFFLINE_GRACE_MS } = require('../game');
 
 function setup(n) {
   const g = new Game();
@@ -174,7 +174,14 @@ test('开车需要所有仍在本轮的在线玩家确认', () => {
   assert.ok(g.readyHeist(ids[3], true).error);
   g.readyHeist(ids[2], true);
   assert.strictEqual(g.phase, 'negotiation');
-  g.disconnect(ids[4]); // 最后一人掉线，不再等他
+  g.disconnect(ids[4]); // 最后一人刚掉线：宽限期内继续等他
+  assert.strictEqual(g.phase, 'negotiation');
+  g.join('token-4-xxxx', ''); // 重连后仍需要他确认
+  g.checkHeistReady();
+  assert.strictEqual(g.phase, 'negotiation');
+  g.disconnect(ids[4]);
+  g.player(ids[4]).offlineSince -= OFFLINE_GRACE_MS; // 掉线超过宽限期，不再等他
+  g.checkHeistReady();
   assert.strictEqual(g.phase, 'results');
 });
 
@@ -183,4 +190,16 @@ test('所有人都退出时自动结束谈判', () => {
   ['brute', 'driver', 'crook', 'crook'].forEach((r, i) => g.choose(ids[i], [r]));
   for (const id of ids) g.withdraw(id, g.slotsOf(id)[0].id);
   assert.strictEqual(g.phase, 'results');
+});
+
+test('告密者掉线时房主可随机点名', () => {
+  const { g, ids } = setup(5);
+  ['snitch', 'driver', 'crook', 'brute', 'driver'].forEach((r, i) => g.choose(ids[i], [r]));
+  g.center.revealed = ['snitch', 'brute', 'driver', 'driver'];
+  g.startHeist(ids[0]);
+  assert.strictEqual(g.phase, 'snitch');
+  assert.ok(g.forceSnitch(ids[1]).error);
+  assert.deepStrictEqual(g.forceSnitch(ids[0]), {});
+  assert.strictEqual(g.phase, 'results');
+  assert.ok(['brute', 'driver'].includes(g.results.named));
 });

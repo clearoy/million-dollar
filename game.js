@@ -17,6 +17,8 @@ const WIN_CASH = 2000;
 const MAX_ROUNDS = 8;
 const MIN_PLAYERS = 3;
 const MAX_PLAYERS = 8;
+// 掉线后保留"需要确认开车"资格的时间，避免手机切后台时被直接跳过
+const OFFLINE_GRACE_MS = 30000;
 
 // 原规则未给出赃款牌明细，这里按"800万—1200万、保证金100万或200万、可能带角色奖励图标"自行设定。
 const LOOT_DECK = [
@@ -160,7 +162,10 @@ class Game {
 
   disconnect(pid) {
     const p = this.player(pid);
-    if (p) p.connected = false;
+    if (p) {
+      p.connected = false;
+      p.offlineSince = Date.now();
+    }
     this.checkHeistReady();
   }
 
@@ -423,9 +428,9 @@ class Game {
   // ---------- 第3阶段：抢劫 ----------
 
   // 开车：所有仍留在本轮（有未退出角色）且在线的玩家都确认后，自动开始抢劫
-  heistNeeded() {
+  heistNeeded(now = Date.now()) {
     return this.players
-      .filter((p) => p.connected && this.slotsOf(p.id).some((s) => !s.withdrawn))
+      .filter((p) => (p.connected || now - p.offlineSince < OFFLINE_GRACE_MS) && this.slotsOf(p.id).some((s) => !s.withdrawn))
       .map((p) => p.id);
   }
 
@@ -474,6 +479,15 @@ class Game {
       }
     }
     this.resolve(null);
+  }
+
+  forceSnitch(by) {
+    if (!this.isHost(by)) return { error: '只有房主可以操作' };
+    if (this.phase !== 'snitch') return { error: '现在不是告密阶段' };
+    const role = this.snitch.options[Math.floor(this.rng() * this.snitch.options.length)];
+    this.addLog(`房主为告密者 ${this.player(this.snitch.playerId).name} 随机点名。`);
+    this.resolve(role);
+    return {};
   }
 
   nameRole(pid, role) {
@@ -723,4 +737,4 @@ class Game {
   }
 }
 
-module.exports = { Game, ROLES, ROLE_ORDER, rolesForCount, LOOT_DECK };
+module.exports = { Game, ROLES, ROLE_ORDER, rolesForCount, LOOT_DECK, OFFLINE_GRACE_MS };
