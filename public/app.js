@@ -100,7 +100,25 @@ function renderStatus() {
     }
     if (s.publicFund) html += `<span class="pill">公共资金 ${money(s.publicFund)}</span>`;
   }
+  const mine = me();
+  if (mine) {
+    html += `<span class="pill">你：<b>${esc(mine.name)}</b> <button class="small ghost" onclick="renameMe()">改名</button></span>`;
+    if (s.phase !== 'lobby') {
+      html += mine.votedRestart
+        ? `<button class="small ghost" onclick="act('voteRestart',{on:false})">撤回重开投票（${s.restartVotes}/${s.restartNeed}）</button>`
+        : `<button class="small ghost" onclick="if(confirm('投票重开？在线玩家过半同意后本局作废，回到大厅。'))act('voteRestart',{on:true})">投票重开${s.restartVotes ? `（${s.restartVotes}/${s.restartNeed}）` : ''}</button>`;
+    }
+  }
   $('#status').innerHTML = html;
+}
+
+function renameMe() {
+  const name = prompt('新的昵称（最多16个字）', me().name);
+  if (name == null || !name.trim()) return;
+  socket.emit('action', { type: 'rename', name: name.trim() }, (res) => {
+    if (res && res.error) toast(res.error);
+    else localStorage.setItem('md-name', name.trim().slice(0, 16));
+  });
 }
 
 function renderJoin() {

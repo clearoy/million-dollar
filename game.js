@@ -126,6 +126,7 @@ class Game {
     this.winners = null;
     this.publicFund = 0;
     this.activeRoles = [];
+    this.restartVotes = [];
     this.log = [];
     for (const p of this.players) this.resetPlayer(p);
   }
@@ -142,7 +143,7 @@ class Game {
     const existing = this.players.find((p) => p.token === token);
     if (existing) {
       existing.connected = true;
-      if (name) existing.name = name;
+      if (name && !this.players.some((p) => p !== existing && p.name === name)) existing.name = name;
       return { playerId: existing.id };
     }
     if (!name) return { error: '请输入昵称' };
@@ -159,6 +160,41 @@ class Game {
   disconnect(pid) {
     const p = this.player(pid);
     if (p) p.connected = false;
+  }
+
+  rename(pid, name) {
+    const p = this.player(pid);
+    name = String(name || '').trim().slice(0, 16);
+    if (!p) return { error: '你不在游戏中' };
+    if (!name) return { error: '请输入昵称' };
+    if (name === p.name) return {};
+    if (this.players.some((x) => x !== p && x.name === name)) return { error: '昵称已被使用' };
+    if (this.phase !== 'lobby') this.addLog(`${p.name} 改名为 ${name}。`);
+    p.name = name;
+    return {};
+  }
+
+  // 投票重开：在线玩家过半同意即回到大厅
+  restartNeed() {
+    return Math.floor(this.players.filter((p) => p.connected).length / 2) + 1;
+  }
+
+  voteRestart(pid, on) {
+    const p = this.player(pid);
+    if (!p) return { error: '你不在游戏中' };
+    if (this.phase === 'lobby') return { error: '游戏还没开始' };
+    const had = this.restartVotes.includes(pid);
+    if (on && !had) this.restartVotes.push(pid);
+    if (!on && had) this.restartVotes = this.restartVotes.filter((id) => id !== pid);
+    if (on === had) return {};
+    const votes = this.restartVotes.filter((id) => this.player(id) && this.player(id).connected).length;
+    const need = this.restartNeed();
+    this.addLog(on ? `${p.name} 投票重开（${votes}/${need}）。` : `${p.name} 撤回了重开投票（${votes}/${need}）。`);
+    if (votes >= need) {
+      this.backToLobby();
+      this.addLog('投票通过，已回到大厅，房主可以重新开始游戏。');
+    }
+    return {};
   }
 
   remove(pid) {
@@ -200,10 +236,14 @@ class Game {
 
   reset(by) {
     if (!this.isHost(by)) return { error: '只有房主可以操作' };
+    this.backToLobby();
+    return {};
+  }
+
+  backToLobby() {
     this.toLobby();
     this.players = this.players.filter((p) => p.connected);
     if (!this.player(this.hostId)) this.hostId = this.players[0] ? this.players[0].id : null;
-    return {};
   }
 
   // ---------- 第1阶段：准备 ----------
@@ -588,6 +628,7 @@ class Game {
       cash: p.cash,
       threats: p.threats.length,
       connected: p.connected,
+      votedRestart: this.restartVotes.includes(p.id),
       isHost: this.effectiveHostId() === p.id,
       isLeader: this.phase !== 'lobby' && this.leaderId() === p.id,
       lastRoles: this.settings.noRepeat || reveal ? p.lastRoles : [],
@@ -631,6 +672,8 @@ class Game {
       snitch: this.snitch && this.phase === 'snitch' ? this.snitch : null,
       results: this.results ? { named: this.results.named, details: this.results.details } : null,
       winners: this.winners,
+      restartVotes: this.restartVotes.filter((id) => this.player(id) && this.player(id).connected).length,
+      restartNeed: this.restartNeed(),
       myThreatsUsable: me ? me.threats.filter((r) => r < this.round).length : 0,
       private: me ? me.private.slice(-20) : [],
       log: this.log.slice(-120),
