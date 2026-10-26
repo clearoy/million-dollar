@@ -250,6 +250,7 @@ function renderActions() {
   if (s.isHost) {
     parts.push(`<details class="host"><summary>房主工具</summary>
       ${s.phase === 'planning' ? `<button class="ghost" onclick="act('forceChoose')">为未选择的玩家随机选身份</button>` : ''}
+      ${s.phase === 'negotiation' ? `<button class="ghost" onclick="if(confirm('不等所有人确认，直接开车？'))act('heist')">强制开车</button>` : ''}
       <button class="ghost danger" onclick="if(confirm('确定结束本局并回到大厅？'))act('reset')">结束本局，回到大厅</button>
     </details>`);
   }
@@ -345,12 +346,23 @@ function renderNegotiation(mine) {
       <button class="small" onclick="act('threat',{target:val('thTarget')})">使用</button></div>` : ''}
   </div>`);
 
-  if (s.canLead) {
-    parts.push(`<button class="big" onclick="if(confirm('谈判结束，开始抢劫？'))act('heist')">🚨 谈判结束，开始抢劫</button>`);
-  } else {
-    parts.push(`<p class="muted">由带头人 ${pname(s.players.find((p) => p.isLeader).id)} 宣布谈判结束。</p>`);
-  }
+  parts.push(renderHeistReady());
   return parts.join('');
+}
+
+function renderHeistReady() {
+  const s = state;
+  const ready = s.heistNeeded.filter((id) => s.heistReady.includes(id));
+  const list = s.heistNeeded.map((id) => `<li>${s.heistReady.includes(id) ? '✅' : '⏳'} ${pname(id)}</li>`).join('');
+  let html = `<h3>🚗 开车确认（${ready.length}/${s.heistNeeded.length}）</h3>
+    <ul class="ready-list">${list}</ul>
+    <p class="muted small">所有仍在本轮的在线玩家都确认后自动开车（开始抢劫）。已退出或离线的玩家不需要确认；确认后还可以取消。</p>`;
+  if (s.heistNeeded.includes(s.you)) {
+    html += s.heistReady.includes(s.you)
+      ? `<button class="big ghost" onclick="act('readyHeist',{on:false})">取消确认</button>`
+      : `<button class="big" onclick="act('readyHeist',{on:true})">🚗 我确认，开车</button>`;
+  }
+  return html;
 }
 
 function val(k) {
@@ -434,7 +446,7 @@ function renderRules() {
     <ul>
       <li>4人：司机、暴徒、恶棍；5–6人：再加告密者；7–8人：再加谋士。</li>
       <li>3人：特殊玩法，见第八条。</li>
-      <li>第一轮带头人随机，之后每轮顺时针交接。带头人负责宣布谈判结束、进入下一轮（掉线时房主可代劳）。</li>
+      <li>第一轮带头人随机，之后每轮顺时针交接。带头人负责推动讨论、进入下一轮（掉线时房主可代劳）。</li>
     </ul>
 
     <h4>三、第1阶段：准备</h4>
@@ -448,6 +460,7 @@ function renderRules() {
     <ul>
       <li>可以说真话、撒谎、假装其他身份、劝别人退出，也可以付钱换别人退出，或自己主动退出。</li>
       <li>交易顺序固定为：谈妥条件 → 先付钱 → 再退出。系统中接受交易后自动执行。</li>
+      <li>开车：所有仍在本轮的在线玩家都点"确认开车"后进入抢劫阶段（已退出、离线的玩家不需要确认）；房主可强制开车。</li>
       <li>退出后取回全部保证金，可保留谈判得到的钱，不能反悔，身份保密，不参与抢劫和分赃，本轮应保持沉默。</li>
       <li>威胁卡：谈判中使用，指定一名玩家偷看其身份，用后丢弃；可累积多张；本轮刚得到的不能本轮使用。</li>
     </ul>

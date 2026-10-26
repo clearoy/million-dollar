@@ -39,6 +39,7 @@ const actions = {
   withdraw: (pid, a) => game.withdraw(pid, a.slotId),
   threat: (pid, a) => game.useThreat(pid, a.target),
   heist: (pid) => game.startHeist(pid),
+  readyHeist: (pid, a) => game.readyHeist(pid, !!a.on),
   name: (pid, a) => game.nameRole(pid, a.role),
   next: (pid) => game.nextRound(pid),
   chat: (pid, a) => game.addChat(pid, a.text),

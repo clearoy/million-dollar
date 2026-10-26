@@ -160,3 +160,27 @@ test('改名与投票重开', () => {
   assert.deepStrictEqual(g.restartVotes, []);
   assert.ok(g.player(ids[0]).cash === 500);
 });
+
+test('开车需要所有仍在本轮的在线玩家确认', () => {
+  const { g, ids } = setup(5);
+  rig(g, { amount: 1000, ante: 100, bonus: null });
+  ['brute', 'driver', 'crook', 'crook', 'driver'].forEach((r, i) => g.choose(ids[i], [r]));
+  assert.ok(g.startHeist(ids[1]).error); // 非房主不能强制开车
+  g.readyHeist(ids[0], true);
+  g.readyHeist(ids[1], true);
+  g.readyHeist(ids[1], false);
+  g.readyHeist(ids[1], true);
+  g.withdraw(ids[3], g.slotsOf(ids[3])[0].id); // 退出者不需要确认
+  assert.ok(g.readyHeist(ids[3], true).error);
+  g.readyHeist(ids[2], true);
+  assert.strictEqual(g.phase, 'negotiation');
+  g.disconnect(ids[4]); // 最后一人掉线，不再等他
+  assert.strictEqual(g.phase, 'results');
+});
+
+test('所有人都退出时自动结束谈判', () => {
+  const { g, ids } = setup(4);
+  ['brute', 'driver', 'crook', 'crook'].forEach((r, i) => g.choose(ids[i], [r]));
+  for (const id of ids) g.withdraw(id, g.slotsOf(id)[0].id);
+  assert.strictEqual(g.phase, 'results');
+});

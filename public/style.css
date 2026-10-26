@@ -123,3 +123,4 @@ details summary { cursor: pointer; color: var(--muted); }
 .rules h4 { color: var(--gold); margin: 14px 0 4px; font-size: 14px; }
 .rules ol { padding-left: 20px; }
 .rules li { margin: 3px 0; }
+.ready-list { list-style: none; padding: 0; margin: 4px 0; display: flex; flex-wrap: wrap; gap: 4px 14px; }
