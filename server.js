@@ -42,6 +42,8 @@ const actions = {
   name: (pid, a) => game.nameRole(pid, a.role),
   next: (pid) => game.nextRound(pid),
   chat: (pid, a) => game.addChat(pid, a.text),
+  rename: (pid, a) => game.rename(pid, a.name),
+  voteRestart: (pid, a) => game.voteRestart(pid, !!a.on),
 };
 
 io.on('connection', (socket) => {

@@ -140,3 +140,23 @@ test('三人局截图复现：唯一的告密者与恶棍平分赃款', () => {
   assert.strictEqual(g.player(ids[1]).cash, 900); // 500 - 200 + 告密者退100 + 500
   assert.strictEqual(g.player(ids[2]).cash, 1000); // 500 - 200 + 200 + 500
 });
+
+test('改名与投票重开', () => {
+  const { g, ids } = setup(5);
+  assert.ok(g.rename(ids[0], 'P1').error);
+  assert.deepStrictEqual(g.rename(ids[0], '新名字'), {});
+  assert.strictEqual(g.player(ids[0]).name, '新名字');
+  // 断线玩家不计入：4人在线，需要3票
+  g.disconnect(ids[4]);
+  assert.strictEqual(g.restartNeed(), 3);
+  g.voteRestart(ids[0], true);
+  g.voteRestart(ids[1], true);
+  g.voteRestart(ids[1], false);
+  g.voteRestart(ids[2], true);
+  assert.strictEqual(g.phase, 'planning');
+  g.voteRestart(ids[3], true);
+  assert.strictEqual(g.phase, 'lobby');
+  assert.strictEqual(g.players.length, 4);
+  assert.deepStrictEqual(g.restartVotes, []);
+  assert.ok(g.player(ids[0]).cash === 500);
+});
