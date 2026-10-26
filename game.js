@@ -127,6 +127,7 @@ class Game {
     this.publicFund = 0;
     this.activeRoles = [];
     this.restartVotes = [];
+    this.heistReady = [];
     this.log = [];
     for (const p of this.players) this.resetPlayer(p);
   }
@@ -160,6 +161,7 @@ class Game {
   disconnect(pid) {
     const p = this.player(pid);
     if (p) p.connected = false;
+    this.checkHeistReady();
   }
 
   rename(pid, name) {
@@ -320,6 +322,7 @@ class Game {
     cards.pop(); // 随机藏起1张
     this.center = { revealed: cards.sort(byOrder), hidden: 1 };
     this.phase = 'negotiation';
+    this.heistReady = [];
     this.addLog(`角色牌已混洗，藏起1张，公开：${this.center.revealed.map(roleName).join('、')}。开始谈判！`);
   }
 
@@ -400,6 +403,7 @@ class Game {
     this.offers = this.offers.filter((o) => o.slotId !== slot.id);
     const extra = this.slotsPerPlayer() > 1 ? '的一个角色' : '';
     this.addLog(`${p.name}${extra} 退出本轮，取回保证金${slot.antePaid}万（身份保密）。`);
+    this.checkHeistReady();
   }
 
   useThreat(pid, targetId) {
@@ -418,11 +422,47 @@ class Game {
 
   // ---------- 第3阶段：抢劫 ----------
 
+  // 开车：所有仍留在本轮（有未退出角色）且在线的玩家都确认后，自动开始抢劫
+  heistNeeded() {
+    return this.players
+      .filter((p) => p.connected && this.slotsOf(p.id).some((s) => !s.withdrawn))
+      .map((p) => p.id);
+  }
+
+  readyHeist(pid, on) {
+    if (this.phase !== 'negotiation') return { error: '现在不是谈判阶段' };
+    const p = this.player(pid);
+    if (!this.heistNeeded().includes(pid)) return { error: '你已退出本轮，不需要确认' };
+    const had = this.heistReady.includes(pid);
+    if (on === had) return {};
+    if (on) this.heistReady.push(pid);
+    else this.heistReady = this.heistReady.filter((id) => id !== pid);
+    const need = this.heistNeeded();
+    const count = need.filter((id) => this.heistReady.includes(id)).length;
+    this.addLog(on ? `${p.name} 确认开车（${count}/${need.length}）。` : `${p.name} 取消了开车确认（${count}/${need.length}）。`);
+    this.checkHeistReady();
+    return {};
+  }
+
+  checkHeistReady() {
+    if (this.phase !== 'negotiation') return;
+    const need = this.heistNeeded();
+    const allOut = this.activeSlots().length === 0;
+    if (allOut || (need.length && need.every((id) => this.heistReady.includes(id)))) {
+      this.beginHeist(allOut ? '所有人都退出了，本轮无人抢劫。' : '所有人都确认了，开车！');
+    }
+  }
+
   startHeist(pid) {
     if (this.phase !== 'negotiation') return { error: '现在不能开始抢劫' };
-    if (!this.canLead(pid)) return { error: '只有带头人（或房主）可以宣布开始抢劫' };
+    if (!this.isHost(pid)) return { error: '只有房主可以强制开车' };
+    this.beginHeist('房主强制开车！');
+    return {};
+  }
+
+  beginHeist(msg) {
     this.offers = [];
-    this.addLog('谈判结束，开始抢劫！');
+    this.addLog(msg);
     const snitches = this.activeSlots().filter((s) => s.role === 'snitch');
     if (snitches.length === 1) {
       const options = [...new Set(this.center.revealed)].filter((r) => r !== 'snitch').sort(byOrder);
@@ -430,11 +470,10 @@ class Game {
         this.phase = 'snitch';
         this.snitch = { slotId: snitches[0].id, playerId: snitches[0].playerId, options };
         this.addLog(`${this.player(snitches[0].playerId).name} 是唯一的告密者，正在点名……`);
-        return {};
+        return;
       }
     }
     this.resolve(null);
-    return {};
   }
 
   nameRole(pid, role) {
@@ -674,6 +713,8 @@ class Game {
       winners: this.winners,
       restartVotes: this.restartVotes.filter((id) => this.player(id) && this.player(id).connected).length,
       restartNeed: this.restartNeed(),
+      heistReady: this.heistReady,
+      heistNeeded: this.phase === 'negotiation' ? this.heistNeeded() : [],
       myThreatsUsable: me ? me.threats.filter((r) => r < this.round).length : 0,
       private: me ? me.private.slice(-20) : [],
       log: this.log.slice(-120),
