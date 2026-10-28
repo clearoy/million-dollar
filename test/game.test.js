@@ -261,6 +261,6 @@ test('赃款有波动且保证金与金额相关', () => {
     if (l.bonus === null) bonusNone++;
     else assert.ok(g.activeRoles.includes(l.bonus));
   }
-  assert.ok(seen.has(600) && seen.has(1600), '应出现小单和大单');
+  assert.deepStrictEqual([...seen].sort((a, b) => a - b), [800, 900, 1000, 1100, 1200]);
   assert.ok(bonusNone > 200 && bonusNone < 600);
 });
