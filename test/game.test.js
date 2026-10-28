@@ -203,3 +203,64 @@ test('告密者掉线时房主可随机点名', () => {
   assert.strictEqual(g.phase, 'results');
   assert.ok(['brute', 'driver'].includes(g.results.named));
 });
+
+test('每轮流水加总等于整轮钱数变化（随机打满整局）', () => {
+  for (const n of [3, 4, 5, 7]) {
+    const { g, ids } = setup(n);
+    while (g.phase !== 'ended') {
+      const start = new Map(g.players.map((p) => [p.id, p.cash]));
+      for (const id of ids) {
+        const roles = g.allowedRoles(id).sort(() => Math.random() - 0.5).slice(0, g.slotsPerPlayer());
+        g.choose(id, roles);
+      }
+      // 随机谈判：转账、交易、退出
+      g.transfer(ids[0], ids[1], 50);
+      const target = g.slots.find((s) => s.playerId === ids[2] && !s.withdrawn);
+      if (target) {
+        g.createOffer(ids[0], { slotId: target.id, payerId: ids[0], amount: 100 });
+        if (g.offers.length) g.respondOffer(ids[2], g.offers[0].id, true);
+      }
+      if (g.phase === 'negotiation') g.startHeist(ids[0]);
+      if (g.phase === 'snitch') g.nameRole(g.snitch.playerId, g.snitch.options[0]);
+      for (const p of g.players) {
+        const l = g.ledger[p.id];
+        const sum = l.ante + l.refund + l.deal + l.split + l.penalty;
+        assert.strictEqual(sum, p.cash - start.get(p.id), `${n}人 第${g.round}轮 ${p.name}`);
+        assert.strictEqual(g.results.deltas[p.id], sum);
+      }
+      if (g.phase === 'results') g.nextRound(ids[0]);
+    }
+    assert.strictEqual(g.history.length, g.round);
+  }
+});
+
+test('每轮回顾：退出者身份在游戏结束前保密', () => {
+  const { g, ids } = setup(4);
+  rig(g, { amount: 1000, ante: 100, bonus: null });
+  ['brute', 'driver', 'crook', 'driver'].forEach((r, i) => g.choose(ids[i], [r]));
+  g.withdraw(ids[3], g.slotsOf(ids[3])[0].id);
+  g.startHeist(ids[0]);
+  const row = (v) => v.history[0].slots.find((s) => s.playerId === ids[3]);
+  assert.strictEqual(row(g.viewFor(ids[0])).role, null);
+  assert.strictEqual(row(g.viewFor(ids[3])).role, 'driver'); // 自己能看到
+  assert.strictEqual(g.viewFor(ids[0]).history[0].slots.find((s) => s.playerId === ids[1]).role, 'driver');
+  g.phase = 'ended';
+  assert.strictEqual(row(g.viewFor(ids[0])).role, 'driver');
+});
+
+test('赃款有波动且保证金与金额相关', () => {
+  const g = new Game();
+  g.activeRoles = ['brute', 'driver', 'crook'];
+  const seen = new Set();
+  let bonusNone = 0;
+  for (let i = 0; i < 2000; i++) {
+    const l = g.drawLoot();
+    seen.add(l.amount);
+    if (l.amount >= 1200) assert.strictEqual(l.ante, 200);
+    if (l.amount <= 800) assert.strictEqual(l.ante, 100);
+    if (l.bonus === null) bonusNone++;
+    else assert.ok(g.activeRoles.includes(l.bonus));
+  }
+  assert.ok(seen.has(600) && seen.has(1600), '应出现小单和大单');
+  assert.ok(bonusNone > 200 && bonusNone < 600);
+});
