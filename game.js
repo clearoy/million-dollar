@@ -20,19 +20,10 @@ const MAX_PLAYERS = 8;
 // 掉线后保留"需要确认开车"资格的时间，避免手机切后台时被直接跳过
 const OFFLINE_GRACE_MS = 30000;
 
-// 原规则未给出赃款牌明细，这里按"800万—1200万、保证金100万或200万、可能带角色奖励图标"自行设定。
-const LOOT_DECK = [
-  { amount: 800, ante: 100, bonus: 'driver' },
-  { amount: 800, ante: 100, bonus: 'brute' },
-  { amount: 900, ante: 100, bonus: 'crook' },
-  { amount: 900, ante: 100, bonus: null },
-  { amount: 1000, ante: 100, bonus: 'mastermind' },
-  { amount: 1000, ante: 200, bonus: 'driver' },
-  { amount: 1100, ante: 200, bonus: 'brute' },
-  { amount: 1100, ante: 200, bonus: 'crook' },
-  { amount: 1200, ante: 200, bonus: 'mastermind' },
-  { amount: 1200, ante: 200, bonus: null },
-];
+// 原规则未给出赃款牌明细。每轮在800万—1200万中独立随机抽取（可能连续出现相同金额）。
+// [金额, 权重]
+const LOOT_AMOUNTS = [[800, 1], [900, 1], [1000, 1], [1100, 1], [1200, 1]];
+const NO_BONUS_CHANCE = 0.2;
 
 function rolesForCount(n) {
   if (n <= 3) return ROLE_ORDER.slice();
@@ -119,7 +110,7 @@ class Game {
     this.round = 0;
     this.leaderIdx = 0;
     this.loot = null;
-    this.lootDeck = [];
+    this.history = [];
     this.slots = [];
     this.center = null;
     this.offers = [];
@@ -233,7 +224,6 @@ class Game {
     if (n < MIN_PLAYERS) return { error: `至少需要${MIN_PLAYERS}名玩家` };
     this.toLobby();
     this.activeRoles = rolesForCount(n);
-    this.lootDeck = shuffle(LOOT_DECK.map((c) => ({ ...c })), this.rng);
     this.leaderIdx = Math.floor(this.rng() * n);
     this.addLog(`游戏开始！${n}名玩家，使用角色：${this.activeRoles.map(roleName).join('、')}。`);
     if (n === 3) this.addLog('三人玩法：每人每轮秘密选择两个不同角色，分别缴纳保证金。');
@@ -261,10 +251,11 @@ class Game {
 
   startRound() {
     this.round += 1;
-    if (this.lootDeck.length === 0) this.lootDeck = shuffle(LOOT_DECK.map((c) => ({ ...c })), this.rng);
-    this.loot = this.lootDeck.pop();
-    if (this.loot.bonus && !this.activeRoles.includes(this.loot.bonus)) this.loot.bonus = null;
+    this.loot = this.drawLoot();
     this.phase = 'planning';
+    // 本轮资金流水，用于结算时展示整轮的钱数变化
+    this.roundStart = new Map(this.players.map((p) => [p.id, p.cash]));
+    this.ledger = Object.fromEntries(this.players.map((p) => [p.id, { ante: 0, refund: 0, deal: 0, split: 0, penalty: 0 }]));
     this.slots = [];
     for (const p of this.players) {
       for (let k = 0; k < this.slotsPerPlayer(); k++) {
@@ -277,6 +268,26 @@ class Game {
     this.results = null;
     const bonus = this.loot.bonus ? `，奖励图标：${roleName(this.loot.bonus)}` : '，无奖励图标';
     this.addLog(`—— 第${this.round}轮 —— 带头人：${this.player(this.leaderId()).name}。赃款${this.loot.amount}万，保证金${this.loot.ante}万${bonus}。`);
+  }
+
+  drawLoot() {
+    const total = LOOT_AMOUNTS.reduce((sum, [, w]) => sum + w, 0);
+    let r = this.rng() * total;
+    let amount = LOOT_AMOUNTS[LOOT_AMOUNTS.length - 1][0];
+    for (const [a, w] of LOOT_AMOUNTS) {
+      if ((r -= w) < 0) {
+        amount = a;
+        break;
+      }
+    }
+    // 大单保证金高，小单保证金低，中间随机
+    const ante = amount >= 1200 ? 200 : amount <= 800 ? 100 : this.rng() < 0.5 ? 100 : 200;
+    const bonus = this.rng() < NO_BONUS_CHANCE ? null : this.activeRoles[Math.floor(this.rng() * this.activeRoles.length)];
+    return { amount, ante, bonus };
+  }
+
+  book(pid, key, amount) {
+    if (this.ledger && this.ledger[pid]) this.ledger[pid][key] += amount;
   }
 
   allowedRoles(pid) {
@@ -304,6 +315,7 @@ class Game {
       // 现金不足时由储备现金补足，退还时只退玩家自己实际缴纳的部分
       s.antePaid = Math.min(p.cash, this.loot.ante);
       p.cash -= s.antePaid;
+      this.book(pid, 'ante', -s.antePaid);
     });
     this.addLog(`${p.name} 已秘密选定身份并缴纳保证金。`);
     if (this.slots.every((s) => s.role)) this.beginNegotiation();
@@ -343,6 +355,8 @@ class Game {
     if (from.cash < amount) return { error: '现金不足' };
     from.cash -= amount;
     to.cash += amount;
+    this.book(from.id, 'deal', -amount);
+    this.book(to.id, 'deal', amount);
     this.addLog(`${from.name} 付给 ${to.name} ${amount}万。`);
     return {};
   }
@@ -388,6 +402,8 @@ class Game {
     if (payer.cash < offer.amount) return { error: `${payer.name} 现金不足` };
     payer.cash -= offer.amount;
     quitter.cash += offer.amount;
+    this.book(payer.id, 'deal', -offer.amount);
+    this.book(quitter.id, 'deal', offer.amount);
     this.addLog(`成交！${payer.name} 付给 ${quitter.name} ${offer.amount}万。`);
     this.doWithdraw(slot);
     return {};
@@ -405,6 +421,7 @@ class Game {
     const p = this.player(slot.playerId);
     slot.withdrawn = true;
     p.cash += slot.antePaid;
+    this.book(p.id, 'refund', slot.antePaid);
     this.offers = this.offers.filter((o) => o.slotId !== slot.id);
     const extra = this.slotsPerPlayer() > 1 ? '的一个角色' : '';
     this.addLog(`${p.name}${extra} 退出本轮，取回保证金${slot.antePaid}万（身份保密）。`);
@@ -499,7 +516,6 @@ class Game {
   }
 
   resolve(named) {
-    const before = new Map(this.players.map((p) => [p.id, p.cash]));
     const active = this.activeSlots();
     const out = new Map(); // slotId -> { outcome, refund, shares, text }
     const set = (s, outcome, refund, shares, text) => out.set(s.id, { outcome, refund, shares, text });
@@ -549,7 +565,10 @@ class Game {
 
     for (const s of active) {
       const o = out.get(s.id);
-      if (o.refund) this.player(s.playerId).cash += s.antePaid;
+      if (o.refund) {
+        this.player(s.playerId).cash += s.antePaid;
+        this.book(s.playerId, 'refund', s.antePaid);
+      }
     }
 
     // 5. 特殊处罚：只剩告密者时不分赃并罚300万，否则告密者正常分赃
@@ -558,6 +577,7 @@ class Game {
       const p = this.player(loneSnitch.playerId);
       const loss = Math.min(300, p.cash);
       p.cash -= loss;
+      this.book(p.id, 'penalty', -loss);
       out.get(loneSnitch.id).shares = false;
       out.get(loneSnitch.id).text = '只剩告密者自己：损失300万，不分赃';
       details.push(`只剩下告密者 ${p.name}，罚款${loss}万。`);
@@ -621,14 +641,26 @@ class Game {
     } else {
       details.push('没有角色有分赃资格，本轮赃款作废。');
     }
+    // 每份分赃已含车费、恶棍拿钱和奖励
+    for (const s of sharers) this.book(s.playerId, 'split', share[s.id]);
 
+    const deltas = Object.fromEntries(this.players.map((p) => [p.id, p.cash - this.roundStart.get(p.id)]));
     this.results = {
       named,
       details,
       slots: active.map((s) => ({ slotId: s.id, playerId: s.playerId, role: s.role, ...out.get(s.id), share: share[s.id] ?? null })),
-      withdrawn: this.slots.filter((s) => s.withdrawn).map((s) => ({ slotId: s.id, playerId: s.playerId })),
-      deltas: Object.fromEntries(this.players.map((p) => [p.id, p.cash - before.get(p.id)])),
+      deltas,
     };
+    this.history.push({
+      round: this.round,
+      loot: { ...this.loot },
+      named,
+      slots: this.slots.map((s) => {
+        const o = out.get(s.id);
+        return { playerId: s.playerId, role: s.role, withdrawn: s.withdrawn, outcome: o ? o.outcome : null, share: share[s.id] ?? null };
+      }),
+      players: this.players.map((p) => ({ id: p.id, delta: deltas[p.id], cash: p.cash, ledger: { ...this.ledger[p.id] } })),
+    });
     for (const d of details) this.addLog(d);
 
     // 胜利判定：只检查本轮参与分赃的玩家
@@ -699,6 +731,15 @@ class Game {
         };
       }),
       delta: this.results ? this.results.deltas[p.id] ?? 0 : 0,
+      ledger: this.results && this.ledger ? this.ledger[p.id] : null,
+    }));
+    // 回顾里退出者的身份在游戏结束后才公开（自己的始终可见）
+    const history = this.history.map((h) => ({
+      ...h,
+      slots: h.slots.map((s) => ({
+        ...s,
+        role: !s.withdrawn || this.phase === 'ended' || s.playerId === pid ? s.role : null,
+      })),
     }));
     return {
       you: me ? me.id : null,
@@ -725,6 +766,7 @@ class Game {
       snitch: this.snitch && this.phase === 'snitch' ? this.snitch : null,
       results: this.results ? { named: this.results.named, details: this.results.details } : null,
       winners: this.winners,
+      history,
       restartVotes: this.restartVotes.filter((id) => this.player(id) && this.player(id).connected).length,
       restartNeed: this.restartNeed(),
       heistReady: this.heistReady,
@@ -737,4 +779,4 @@ class Game {
   }
 }
 
-module.exports = { Game, ROLES, ROLE_ORDER, rolesForCount, LOOT_DECK, OFFLINE_GRACE_MS };
+module.exports = { Game, ROLES, ROLE_ORDER, rolesForCount, LOOT_AMOUNTS, OFFLINE_GRACE_MS };

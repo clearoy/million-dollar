@@ -171,7 +171,8 @@ function renderGame() {
       <section class="card">
         ${renderActions()}
       </section>
-    </div>`;
+    </div>
+    ${renderHistory()}`;
 }
 
 function renderPlayers() {
@@ -192,7 +193,7 @@ function renderPlayers() {
     }).join('');
     const last = p.lastRoles && p.lastRoles.length && s.settings.noRepeat
       ? `<div class="muted small">上轮：${p.lastRoles.map((r) => esc(roleName(r))).join('、')}</div>` : '';
-    const delta = showResult && p.delta ? `<span class="${p.delta > 0 ? 'up' : 'down'}">${p.delta > 0 ? '+' : ''}${p.delta}</span>` : '';
+    const delta = showResult ? `${signed(p.delta)}${ledgerLine(p.ledger)}` : '';
     const win = s.winners && s.winners.includes(p.id) ? '🏆 ' : '';
     return `
       <tr class="${p.id === s.you ? 'mine' : ''}">
@@ -207,6 +208,44 @@ function renderPlayers() {
       </tr>`;
   }).join('');
   return `<table class="players"><thead><tr><th>玩家</th><th>现金</th><th>威胁</th><th>身份</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+const signed = (n) => `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : 'muted'}">${n > 0 ? '+' : ''}${n}</span>`;
+const LEDGER = [['ante', '保证金'], ['refund', '退回'], ['split', '分赃'], ['deal', '谈判'], ['penalty', '罚款']];
+
+// 本轮钱数变化明细，只列出非零项
+function ledgerLine(l) {
+  if (!l) return '';
+  const items = LEDGER.filter(([k]) => l[k]).map(([k, label]) => `${label}${l[k] > 0 ? '+' : ''}${l[k]}`);
+  return items.length ? `<div class="ledger">${items.join(' · ')}</div>` : '';
+}
+
+let historyOpen = false;
+
+function renderHistory() {
+  const s = state;
+  if (!s.history || !s.history.length) return '';
+  const open = historyOpen || s.phase === 'ended';
+  const head = s.history.map((h) => `<th>第${h.round}轮<div class="muted small">${money(h.loot.amount)}${h.loot.bonus ? ` · ${esc(roleName(h.loot.bonus))}` : ''}</div></th>`).join('');
+  const rows = s.players.map((p) => {
+    const cells = s.history.map((h) => {
+      const slots = h.slots.filter((sl) => sl.playerId === p.id).map((sl) => {
+        let html = sl.role ? tag(sl.role, sl.withdrawn ? 'faded' : '') : '<span class="role hidden-role">？</span>';
+        if (sl.withdrawn) html += '<span class="muted small">退出</span>';
+        else if (sl.outcome && sl.outcome !== 'ok' && sl.outcome !== 'snitch') html += `<span class="small">${OUTCOME[sl.outcome].split(' ')[0]}</span>`;
+        return html;
+      }).join(' ');
+      const row = h.players.find((x) => x.id === p.id);
+      return `<td>${slots}<div>${row ? signed(row.delta) : ''}</div></td>`;
+    }).join('');
+    const win = s.winners && s.winners.includes(p.id) ? '🏆 ' : '';
+    return `<tr><td>${win}${esc(p.name)}</td>${cells}<td class="num"><b>${money(p.cash)}</b></td></tr>`;
+  }).join('');
+  return `<details class="card history" ${open ? 'open' : ''} ontoggle="historyOpen=this.open">
+    <summary>📊 每轮回顾${s.phase === 'ended' ? '（游戏结束，已公开所有退出者的身份）' : ''}</summary>
+    <div class="table-wrap"><table class="players"><thead><tr><th>玩家</th>${head}<th>现金</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="muted small">表头是每轮的赃款和奖励图标。💥撞车出局 ☠️被点名；${s.phase === 'ended' ? '' : '退出者的身份在游戏结束后公开；'}数字是该玩家整轮的钱数变化（含保证金、谈判和分赃）。</p>
+  </details>`;
 }
 
 function renderCenter() {
@@ -402,7 +441,7 @@ function sendTransfer() {
 function renderResults() {
   const s = state;
   let html = `<h3>📊 第${s.round}轮结算</h3><ol class="details">${s.results.details.map((d) => `<li>${esc(d)}</li>`).join('')}</ol>`;
-  html += '<p class="muted">鼠标悬停 / 点按玩家列表中的结果可看说明；退出的玩家身份保密。</p>';
+  html += '<p class="muted">玩家列表里的数字是整轮的钱数变化，下面一行是明细；鼠标悬停 / 点按结果可看说明；退出的玩家身份保密。</p>';
   if (s.phase === 'ended') {
     html += `<div class="winner">🏆 获胜者：${s.winners.map(pname).join('、')}</div>`;
     if (s.isHost) html += `<button class="big" onclick="act('reset')">回到大厅，再来一局</button>`;
@@ -455,7 +494,7 @@ function renderRules() {
 
     <h4>三、第1阶段：准备</h4>
     <ol>
-      <li>翻开一张赃款牌：金额 800万—1200万，保证金 100万或200万，可能带一个角色奖励图标。</li>
+      <li>翻开一张赃款牌：金额 800万—1200万（每轮随机），保证金 100万或200万（1200万必为200万，800万必为100万，其余随机），大多带一个角色奖励图标。</li>
       <li>每人<b>秘密</b>选择一个身份并缴纳保证金（现金不足由储备现金补足，退还时只退自己实际交的部分）。不同玩家可以选同一身份；选定后本轮不能更换。</li>
       <li>所有人的角色牌混洗，随机藏起1张，其余公开。大家只知道本轮有哪些身份，不知道谁是谁。</li>
     </ol>
@@ -509,7 +548,7 @@ function renderRules() {
 
     <h4>十、本版补充说明</h4>
     <ul>
-      <li>赃款牌为自设的10张（800—1200万），官方牌组明细未知。</li>
+      <li>赃款牌每轮随机生成（官方牌组明细未知）。</li>
       <li>付车费或被恶棍拿钱时现金不足的，最多付到0，不欠款。</li>
     </ul>`;
 }
